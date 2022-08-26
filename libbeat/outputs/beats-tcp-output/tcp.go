@@ -25,7 +25,6 @@ func init() {
 type tcpOut struct {
 	*logp.Logger
 	connection net.Conn
-	tcpOpened  bool
 	bw         *bufio.Writer
 	buf        net.Buffers
 
@@ -66,7 +65,7 @@ func makeTcp(
 	if err != nil {
 		return outputs.Fail(err)
 	}
-	return outputs.Success(-1, 0, t)
+	return outputs.Success(-1, 0, outputs.WithBackoff(t, config.Backoff.Init, config.Backoff.Max))
 }
 
 func newTcpOut(logger *logp.Logger, index string, c Config, observer outputs.Observer, codec codec.Codec) (*tcpOut, error) {
@@ -74,7 +73,7 @@ func newTcpOut(logger *logp.Logger, index string, c Config, observer outputs.Obs
 		Logger:        logger,
 		writevEnable:  c.WritevEnable,
 		sslEnable:     c.SSLEnable,
-		lineDelimiter: []byte(c.lineDelimiter),
+		lineDelimiter: []byte(c.LineDelimiter),
 		observer:      observer,
 		index:         index,
 		codec:         codec,
@@ -94,13 +93,6 @@ func newTcpOut(logger *logp.Logger, index string, c Config, observer outputs.Obs
 		t.sslConfig = &tls.Config{Certificates: []tls.Certificate{cert}, InsecureSkipVerify: true}
 	}
 
-	err = t.newTcpConn()
-	if err != nil {
-		t.Info("dial tcp %v err: %v.", t.address, err)
-		err = nil
-		//return nil, err
-	}
-
 	if t.writevEnable {
 		t.buf = make([][]byte, c.BufferSize)
 	} else {
@@ -110,8 +102,7 @@ func newTcpOut(logger *logp.Logger, index string, c Config, observer outputs.Obs
 	t.Info("new tcp output, address=%v", t.address)
 	return t, nil
 }
-
-func (t *tcpOut) newTcpConn() (err error) {
+func (t *tcpOut) Connect() (err error) {
 	if t.sslEnable {
 		t.connection, err = tls.Dial(networkTCP, t.address.String(), t.sslConfig)
 	} else {
@@ -120,39 +111,27 @@ func (t *tcpOut) newTcpConn() (err error) {
 	if err != nil {
 		return err
 	}
-	t.tcpOpened = true
 	if !t.writevEnable {
 		t.bw.Reset(t.connection)
 	}
 	return nil
 }
 
-func (t *tcpOut) closeTcpConn() {
-	t.tcpOpened = false
-	_ = t.connection.Close()
-	t.connection = nil
-}
-
 func (t *tcpOut) Close() error {
 	t.Info("TCP output connection %v close.", t.address)
-	return t.connection.Close()
+	_ = t.connection.Close()
+	t.connection = nil
+	return nil
 }
 
 func (t *tcpOut) Publish(ctx context.Context, batch publisher.Batch) error {
-	if !t.tcpOpened {
-		err := t.newTcpConn()
-		if err != nil {
-			t.Info("dial tcp %v err: %v.", t.address, err)
-			return nil
-		}
-	}
 	if t.writevEnable {
 		return t.publishWritev(batch)
 	}
 	return t.publish(batch)
 }
 
-func (t *tcpOut) publish(batch publisher.Batch) error {
+func (t *tcpOut) publish(batch publisher.Batch) (err error) {
 	events := batch.Events()
 	t.observer.NewBatch(len(events))
 
@@ -178,21 +157,20 @@ func (t *tcpOut) publish(batch publisher.Batch) error {
 		}
 		bulkSize += len(serializedEvent) + 1
 	}
-	err := t.bw.Flush()
+	err = t.bw.Flush()
 	if err != nil {
 		t.observer.WriteError(err)
 		dropped = len(events)
-		t.closeTcpConn()
 	}
 
 	t.observer.WriteBytes(bulkSize)
 	t.observer.Dropped(dropped)
 	t.observer.Acked(len(events) - dropped)
 	batch.ACK()
-	return nil
+	return err
 }
 
-func (t *tcpOut) publishWritev(batch publisher.Batch) error {
+func (t *tcpOut) publishWritev(batch publisher.Batch) (err error) {
 	events := batch.Events()
 	t.observer.NewBatch(len(events))
 
@@ -206,18 +184,18 @@ func (t *tcpOut) publishWritev(batch publisher.Batch) error {
 		}
 		t.buf = append(t.buf, append(serializedEvent, t.lineDelimiter...))
 	}
-	n, err := t.buf.WriteTo(t.connection)
+	var n int64
+	n, err = t.buf.WriteTo(t.connection)
 	if err != nil {
 		t.observer.WriteError(err)
 		dropped = len(events)
-		t.closeTcpConn()
 	}
 
 	t.observer.WriteBytes(int(n))
 	t.observer.Dropped(dropped)
 	t.observer.Acked(len(events) - dropped)
 	batch.ACK()
-	return nil
+	return err
 }
 
 func (t *tcpOut) String() string {

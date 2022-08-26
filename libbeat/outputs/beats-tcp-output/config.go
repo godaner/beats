@@ -3,29 +3,40 @@ package tcp
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/elastic/beats/v7/libbeat/outputs/codec"
 	"github.com/pkg/errors"
 )
 
+type Backoff struct {
+	Init time.Duration
+	Max  time.Duration
+}
 type Config struct {
-	Host            string       `config:"host"`
-	Port            string       `config:"port"`
+	Host string `config:"host"`
+	Port string `config:"port"`
 
-	BufferSize      int          `config:"buffer_size"`
-	WritevEnable    bool         `config:"writev"`
-	SSLEnable       bool         `config:"ssl.enable"`
-	SSLCertPath     string       `config:"ssl.cert_path"`
-	SSLKeyPath      string       `config:"ssl.key_path"`
+	BufferSize   int    `config:"buffer_size"`
+	WritevEnable bool   `config:"writev"`
+	SSLEnable    bool   `config:"ssl.enable"`
+	SSLCertPath  string `config:"ssl.cert_path"`
+	SSLKeyPath   string `config:"ssl.key_path"`
 
-	lineDelimiter   string       `config:"line_delimiter"`
-	Codec           codec.Config `config:"codec"`
+	LineDelimiter string       `config:"line_delimiter"`
+	Codec         codec.Config `config:"codec"`
+
+	Backoff Backoff `config:"backoff"`
 }
 
 var defaultConfig = Config{
-	BufferSize: 1 << 15,
-	WritevEnable: true,
-	lineDelimiter: "\n",
+	BufferSize:    1 << 15,
+	WritevEnable:  true,
+	LineDelimiter: "\n",
+	Backoff: Backoff{
+		Init: 1 * time.Second,
+		Max:  60 * time.Second,
+	},
 }
 
 func (c *Config) Validate() error {
