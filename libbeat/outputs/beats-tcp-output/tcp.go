@@ -96,7 +96,7 @@ func newTcpOut(logger *logp.Logger, index string, c Config, observer outputs.Obs
 
 	err = t.newTcpConn()
 	if err != nil {
-		t.Error("new tcp conn err, address=%v, err: %v", t.address, err)
+		t.Info("dial tcp %v err: %v.", t.address, err)
 		err = nil
 		//return nil, err
 	}
@@ -142,7 +142,8 @@ func (t *tcpOut) Publish(ctx context.Context, batch publisher.Batch) error {
 	if !t.tcpOpened {
 		err := t.newTcpConn()
 		if err != nil {
-			return err
+			t.Info("dial tcp %v err: %v.", t.address, err)
+			return nil
 		}
 	}
 	if t.writevEnable {
