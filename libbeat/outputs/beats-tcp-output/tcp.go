@@ -95,7 +95,9 @@ func newTcpOut(index string, c Config, observer outputs.Observer, codec codec.Co
 
 	err = t.newTcpConn()
 	if err != nil {
-		return nil, err
+		logp.Err("new tcp conn err, address=%v, err: %v", t.address, err)
+		err = nil
+		//return nil, err
 	}
 
 	if t.writevEnable {
@@ -113,6 +115,9 @@ func (t *tcpOut) newTcpConn() (err error) {
 		t.connection, err = tls.Dial(networkTCP, t.address.String(), t.sslConfig)
 	} else {
 		t.connection, err = net.DialTCP(networkTCP, nil, t.address)
+	}
+	if !t.writevEnable {
+		t.bw.Reset(t.connection)
 	}
 	return err
 }

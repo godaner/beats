@@ -8,6 +8,10 @@ EXCLUDE_COMMON_UPDATE_TARGET=true
 
 include ${ES_BEATS}/libbeat/scripts/Makefile
 
+.PHONY: build
+build:
+	CC="gcc" CXX="g++" CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o filebeat
+
 .PHONY: update
 update: mage
 	mage update
