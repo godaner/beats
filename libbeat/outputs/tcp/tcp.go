@@ -19,7 +19,7 @@ const (
 )
 
 func init() {
-	outputs.RegisterType("tcp", makeTcp)
+	outputs.RegisterType("tcp", MakeTcp)
 }
 
 type tcpOut struct {
@@ -40,7 +40,7 @@ type tcpOut struct {
 	index    string
 }
 
-func makeTcp(
+func MakeTcp(
 	_ outputs.IndexManager,
 	beat beat.Info,
 	observer outputs.Observer,
@@ -50,7 +50,7 @@ func makeTcp(
 	if err := cfg.Unpack(&config); err != nil {
 		return outputs.Fail(err)
 	}
-	logger := logp.NewLogger("beats-tcp-output")
+	logger := logp.NewLogger("beats-output-tcp")
 	// disable bulk support in publisher pipeline
 	err := cfg.SetInt("bulk_max_size", -1, -1)
 	if err != nil {
@@ -118,7 +118,7 @@ func (t *tcpOut) Connect() (err error) {
 }
 
 func (t *tcpOut) Close() error {
-	t.Info("TCP output connection %v close.", t.address)
+	t.Info("tcp output connection %v close", t.address)
 	_ = t.connection.Close()
 	t.connection = nil
 	return nil

@@ -19,7 +19,7 @@ package includes
 
 import (
 	//_ "github.com/elastic/beats/v7/libbeat/outputs/beats-output-http/http"
-	_ "github.com/elastic/beats/v7/libbeat/outputs/beats-tcp-output"
+	_ "github.com/elastic/beats/v7/libbeat/outputs/tcp"
 	// import queue types
 	_ "github.com/elastic/beats/v7/libbeat/outputs/codec/format"
 	_ "github.com/elastic/beats/v7/libbeat/outputs/codec/json"

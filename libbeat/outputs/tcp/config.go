@@ -9,10 +9,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-type Backoff struct {
-	Init time.Duration
-	Max  time.Duration
-}
 type Config struct {
 	Host string `config:"host"`
 	Port string `config:"port"`
@@ -29,9 +25,14 @@ type Config struct {
 	Backoff Backoff `config:"backoff"`
 }
 
+type Backoff struct {
+	Init time.Duration `config:"init"`
+	Max  time.Duration `config:"max"`
+}
+
 var defaultConfig = Config{
 	BufferSize:    1 << 15,
-	WritevEnable:  true,
+	WritevEnable:  false,
 	LineDelimiter: "\n",
 	Backoff: Backoff{
 		Init: 1 * time.Second,
