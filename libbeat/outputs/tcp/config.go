@@ -32,7 +32,7 @@ type Backoff struct {
 
 var defaultConfig = Config{
 	BufferSize:    1 << 15,
-	WritevEnable:  false,
+	WritevEnable:  true,
 	LineDelimiter: "\n",
 	Backoff: Backoff{
 		Init: 1 * time.Second,
