@@ -155,7 +155,7 @@ func (t *tcpOut) publish(batch publisher.Batch) (err error) {
 			dropped++
 			continue
 		}
-		bulkSize += len(serializedEvent) + 1
+		bulkSize += len(serializedEvent) + len(t.lineDelimiter)
 	}
 	err = t.bw.Flush()
 	if err != nil {
