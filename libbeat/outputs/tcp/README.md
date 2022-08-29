@@ -34,11 +34,7 @@ output.tcp:
 
 #### buffer_size
 
-The buffer size of `bufio.Writer` and `net.Buffers`. Default 1<<15 (32768).
-
-#### writev
-
-Whether enable `writev` (a batch write optimization to reduce syscall). Default true.
+The buffer size of `net.Buffers`. Default 1<<15 (32768).
 
 #### line_delimiter
 

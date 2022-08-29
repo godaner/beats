@@ -9,15 +9,14 @@ import (
 	"github.com/pkg/errors"
 )
 
-type Config struct {
+type tcpConfig struct {
 	Host string `config:"host"`
 	Port string `config:"port"`
 
-	BufferSize   int    `config:"buffer_size"`
-	WritevEnable bool   `config:"writev"`
-	SSLEnable    bool   `config:"ssl.enable"`
-	SSLCertPath  string `config:"ssl.cert_path"`
-	SSLKeyPath   string `config:"ssl.key_path"`
+	BufferSize  int    `config:"buffer_size"`
+	SSLEnable   bool   `config:"ssl.enable"`
+	SSLCertPath string `config:"ssl.cert_path"`
+	SSLKeyPath  string `config:"ssl.key_path"`
 
 	LineDelimiter string       `config:"line_delimiter"`
 	Codec         codec.Config `config:"codec"`
@@ -30,9 +29,8 @@ type Backoff struct {
 	Max  time.Duration `config:"max"`
 }
 
-var defaultConfig = Config{
+var defaultConfig = tcpConfig{
 	BufferSize:    1 << 15,
-	WritevEnable:  true,
 	LineDelimiter: "\n",
 	Backoff: Backoff{
 		Init: 1 * time.Second,
@@ -40,7 +38,7 @@ var defaultConfig = Config{
 	},
 }
 
-func (c *Config) Validate() error {
+func (c *tcpConfig) Validate() error {
 	if c.SSLEnable {
 		if _, err := os.Stat(c.SSLCertPath); os.IsNotExist(err) {
 			return errors.New(fmt.Sprintf("certificate %s not found", c.SSLCertPath))

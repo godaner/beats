@@ -1,7 +1,6 @@
 package tcp
 
 import (
-	"bufio"
 	"context"
 	"crypto/tls"
 	"github.com/elastic/beats/v7/libbeat/beat"
@@ -19,19 +18,17 @@ const (
 )
 
 func init() {
-	outputs.RegisterType("tcp", MakeTcp)
+	outputs.RegisterType("tcp", makeTcp)
 }
 
 type tcpOut struct {
 	*logp.Logger
 	connection net.Conn
-	bw         *bufio.Writer
 	buf        net.Buffers
 
-	address      *net.TCPAddr
-	writevEnable bool
-	sslEnable    bool
-	sslConfig    *tls.Config
+	address   *net.TCPAddr
+	sslEnable bool
+	sslConfig *tls.Config
 
 	lineDelimiter []byte
 	codec         codec.Codec
@@ -40,7 +37,7 @@ type tcpOut struct {
 	index    string
 }
 
-func MakeTcp(
+func makeTcp(
 	_ outputs.IndexManager,
 	beat beat.Info,
 	observer outputs.Observer,
@@ -50,7 +47,7 @@ func MakeTcp(
 	if err := cfg.Unpack(&config); err != nil {
 		return outputs.Fail(err)
 	}
-	logger := logp.NewLogger("beats-output-tcp")
+	logger := logp.NewLogger("tcp")
 	// disable bulk support in publisher pipeline
 	err := cfg.SetInt("bulk_max_size", -1, -1)
 	if err != nil {
@@ -68,15 +65,15 @@ func MakeTcp(
 	return outputs.Success(-1, 0, outputs.WithBackoff(t, config.Backoff.Init, config.Backoff.Max))
 }
 
-func newTcpOut(logger *logp.Logger, index string, c Config, observer outputs.Observer, codec codec.Codec) (*tcpOut, error) {
+func newTcpOut(logger *logp.Logger, index string, c tcpConfig, observer outputs.Observer, codec codec.Codec) (*tcpOut, error) {
 	t := &tcpOut{
 		Logger:        logger,
-		writevEnable:  c.WritevEnable,
 		sslEnable:     c.SSLEnable,
 		lineDelimiter: []byte(c.LineDelimiter),
 		observer:      observer,
 		index:         index,
 		codec:         codec,
+		buf:           make([][]byte, c.BufferSize),
 	}
 	addr, err := net.ResolveTCPAddr(networkTCP, net.JoinHostPort(c.Host, c.Port))
 	if err != nil {
@@ -93,12 +90,6 @@ func newTcpOut(logger *logp.Logger, index string, c Config, observer outputs.Obs
 		t.sslConfig = &tls.Config{Certificates: []tls.Certificate{cert}, InsecureSkipVerify: true}
 	}
 
-	if t.writevEnable {
-		t.buf = make([][]byte, c.BufferSize)
-	} else {
-		t.bw = bufio.NewWriterSize(t.connection, c.BufferSize)
-	}
-
 	t.Info("new tcp output, address=%v", t.address)
 	return t, nil
 }
@@ -108,13 +99,7 @@ func (t *tcpOut) Connect() (err error) {
 	} else {
 		t.connection, err = net.DialTCP(networkTCP, nil, t.address)
 	}
-	if err != nil {
-		return err
-	}
-	if !t.writevEnable {
-		t.bw.Reset(t.connection)
-	}
-	return nil
+	return err
 }
 
 func (t *tcpOut) Close() error {
@@ -125,52 +110,6 @@ func (t *tcpOut) Close() error {
 }
 
 func (t *tcpOut) Publish(ctx context.Context, batch publisher.Batch) error {
-	if t.writevEnable {
-		return t.publishWritev(batch)
-	}
-	return t.publish(batch)
-}
-
-func (t *tcpOut) publish(batch publisher.Batch) (err error) {
-	events := batch.Events()
-	t.observer.NewBatch(len(events))
-
-	bulkSize := 0
-	dropped := 0
-	for i := range events {
-		serializedEvent, err := t.codec.Encode(t.index, &events[i].Content)
-		if err != nil {
-			dropped++
-			continue
-		}
-		_, err = t.bw.Write(serializedEvent)
-		if err != nil {
-			t.observer.WriteError(err)
-			dropped++
-			continue
-		}
-		_, err = t.bw.Write(t.lineDelimiter)
-		if err != nil {
-			t.observer.WriteError(err)
-			dropped++
-			continue
-		}
-		bulkSize += len(serializedEvent) + len(t.lineDelimiter)
-	}
-	err = t.bw.Flush()
-	if err != nil {
-		t.observer.WriteError(err)
-		dropped = len(events)
-	}
-
-	t.observer.WriteBytes(bulkSize)
-	t.observer.Dropped(dropped)
-	t.observer.Acked(len(events) - dropped)
-	batch.ACK()
-	return err
-}
-
-func (t *tcpOut) publishWritev(batch publisher.Batch) (err error) {
 	events := batch.Events()
 	t.observer.NewBatch(len(events))
 
@@ -184,8 +123,7 @@ func (t *tcpOut) publishWritev(batch publisher.Batch) (err error) {
 		}
 		t.buf = append(t.buf, append(serializedEvent, t.lineDelimiter...))
 	}
-	var n int64
-	n, err = t.buf.WriteTo(t.connection)
+	n, err := t.buf.WriteTo(t.connection)
 	if err != nil {
 		t.observer.WriteError(err)
 		dropped = len(events)
