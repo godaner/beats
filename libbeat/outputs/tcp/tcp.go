@@ -24,7 +24,7 @@ func init() {
 type tcpOut struct {
 	*logp.Logger
 	connection net.Conn
-	buf        net.Buffers
+	//buf        net.Buffers
 
 	address   *net.TCPAddr
 	sslEnable bool
@@ -73,7 +73,7 @@ func newTcpOut(logger *logp.Logger, index string, c tcpConfig, observer outputs.
 		observer:      observer,
 		index:         index,
 		codec:         codec,
-		buf:           make([][]byte, c.BufferSize),
+		//buf:           make([][]byte, c.BufferSize),
 	}
 	addr, err := net.ResolveTCPAddr(networkTCP, net.JoinHostPort(c.Host, c.Port))
 	if err != nil {
@@ -114,26 +114,32 @@ func (t *tcpOut) Publish(ctx context.Context, batch publisher.Batch) error {
 	t.observer.NewBatch(len(events))
 
 	dropped := 0
-	t.buf = t.buf[:0]
+	//buf := net.Buffers{}
 	for i := range events {
 		serializedEvent, err := t.codec.Encode(t.index, &events[i].Content)
 		if err != nil {
 			dropped++
 			continue
 		}
-		t.buf = append(t.buf, append(serializedEvent, t.lineDelimiter...))
+		//buf = append(buf, append(serializedEvent, t.lineDelimiter...))
+		n, err := t.connection.Write(append(serializedEvent, t.lineDelimiter...))
+		if err != nil {
+			t.observer.WriteError(err)
+			dropped++
+			return err
+		}
+		t.observer.WriteBytes(n)
 	}
-	n, err := t.buf.WriteTo(t.connection)
-	if err != nil {
-		t.observer.WriteError(err)
-		dropped = len(events)
-	}
+	//n, err := buf.WriteTo(t.connection)
+	//if err != nil {
+	//	t.observer.WriteError(err)
+	//	dropped = len(events)
+	//}
 
-	t.observer.WriteBytes(int(n))
 	t.observer.Dropped(dropped)
 	t.observer.Acked(len(events) - dropped)
 	batch.ACK()
-	return err
+	return nil
 }
 
 func (t *tcpOut) String() string {
