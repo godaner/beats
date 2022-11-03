@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	networkTCP = "tcp4"
+	networkTCP = "tcp"
 )
 
 func init() {
@@ -24,7 +24,6 @@ func init() {
 type tcpOut struct {
 	*logp.Logger
 	connection net.Conn
-	//buf        net.Buffers
 
 	address   *net.TCPAddr
 	sslEnable bool
@@ -53,16 +52,19 @@ func makeTcp(
 	if err != nil {
 		logger.Info("cfg.SetInt failed with: %v", err)
 	}
-
-	enc, err := codec.CreateEncoder(beat, config.Codec)
-	if err != nil {
-		return outputs.Fail(err)
+	clis := make([]outputs.NetworkClient, 0, config.Worker)
+	for i := 0; i < config.Worker; i++ {
+		enc, err := codec.CreateEncoder(beat, config.Codec)
+		if err != nil {
+			return outputs.Fail(err)
+		}
+		t, err := newTcpOut(logger, beat.Beat, config, observer, enc)
+		if err != nil {
+			return outputs.Fail(err)
+		}
+		clis = append(clis, outputs.WithBackoff(t, config.Backoff.Init, config.Backoff.Max))
 	}
-	t, err := newTcpOut(logger, beat.Beat, config, observer, enc)
-	if err != nil {
-		return outputs.Fail(err)
-	}
-	return outputs.Success(-1, 0, outputs.WithBackoff(t, config.Backoff.Init, config.Backoff.Max))
+	return outputs.SuccessNet(true, -1, 0, clis)
 }
 
 func newTcpOut(logger *logp.Logger, index string, c tcpConfig, observer outputs.Observer, codec codec.Codec) (*tcpOut, error) {
@@ -73,7 +75,6 @@ func newTcpOut(logger *logp.Logger, index string, c tcpConfig, observer outputs.
 		observer:      observer,
 		index:         index,
 		codec:         codec,
-		//buf:           make([][]byte, c.BufferSize),
 	}
 	addr, err := net.ResolveTCPAddr(networkTCP, net.JoinHostPort(c.Host, c.Port))
 	if err != nil {
@@ -125,7 +126,6 @@ func (t *tcpOut) Publish(ctx context.Context, batch publisher.Batch) error {
 		n, err := t.connection.Write(append(serializedEvent, t.lineDelimiter...))
 		if err != nil {
 			t.observer.WriteError(err)
-			dropped++
 			return err
 		}
 		t.observer.WriteBytes(n)
@@ -135,7 +135,6 @@ func (t *tcpOut) Publish(ctx context.Context, batch publisher.Batch) error {
 	//	t.observer.WriteError(err)
 	//	dropped = len(events)
 	//}
-
 	t.observer.Dropped(dropped)
 	t.observer.Acked(len(events) - dropped)
 	batch.ACK()

@@ -13,7 +13,6 @@ type tcpConfig struct {
 	Host string `config:"host"`
 	Port string `config:"port"`
 
-	BufferSize  int    `config:"buffer_size"`
 	SSLEnable   bool   `config:"ssl.enable"`
 	SSLCertPath string `config:"ssl.cert_path"`
 	SSLKeyPath  string `config:"ssl.key_path"`
@@ -22,6 +21,8 @@ type tcpConfig struct {
 	Codec         codec.Config `config:"codec"`
 
 	Backoff Backoff `config:"backoff"`
+
+	Worker int `config:"worker"`
 }
 
 type Backoff struct {
@@ -30,7 +31,7 @@ type Backoff struct {
 }
 
 var defaultConfig = tcpConfig{
-	BufferSize:    1 << 15,
+	Worker:        3,
 	LineDelimiter: "\n",
 	Backoff: Backoff{
 		Init: 1 * time.Second,
