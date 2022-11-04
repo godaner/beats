@@ -11,6 +11,7 @@ import (
 	"github.com/elastic/elastic-agent-libs/logp"
 	"github.com/pkg/errors"
 	"net"
+	"time"
 )
 
 const (
@@ -35,6 +36,8 @@ type tcpOut struct {
 	observer outputs.Observer
 	index    string
 }
+
+var count int64
 
 func makeTcp(
 	_ outputs.IndexManager,
@@ -64,6 +67,15 @@ func makeTcp(
 		}
 		clis = append(clis, outputs.WithBackoff(t, config.Backoff.Init, config.Backoff.Max))
 	}
+	go func() {
+		for {
+			select {
+			case <-time.After(time.Second):
+				logger.Infof("count: %v/s", count)
+				count = 0
+			}
+		}
+	}()
 	return outputs.SuccessNet(true, -1, 0, clis)
 }
 
@@ -95,41 +107,41 @@ func newTcpOut(logger *logp.Logger, index string, c tcpConfig, observer outputs.
 	return t, nil
 }
 func (t *tcpOut) Connect() (err error) {
-	if t.sslEnable {
-		t.connection, err = tls.Dial(networkTCP, t.address.String(), t.sslConfig)
-	} else {
-		t.connection, err = net.DialTCP(networkTCP, nil, t.address)
-	}
+	//if t.sslEnable {
+	//	t.connection, err = tls.Dial(networkTCP, t.address.String(), t.sslConfig)
+	//} else {
+	//	t.connection, err = net.DialTCP(networkTCP, nil, t.address)
+	//}
 	return err
 }
 
 func (t *tcpOut) Close() error {
 	t.Info("tcp output connection %v close", t.address)
-	_ = t.connection.Close()
-	t.connection = nil
+	//_ = t.connection.Close()
+	//t.connection = nil
 	return nil
 }
 
 func (t *tcpOut) Publish(ctx context.Context, batch publisher.Batch) error {
+
 	events := batch.Events()
+
 	t.observer.NewBatch(len(events))
 
 	dropped := 0
 	//buf := net.Buffers{}
-	for i := range events {
-		serializedEvent, err := t.codec.Encode(t.index, &events[i].Content)
-		if err != nil {
-			dropped++
-			continue
-		}
-		//buf = append(buf, append(serializedEvent, t.lineDelimiter...))
-		n, err := t.connection.Write(append(serializedEvent, t.lineDelimiter...))
-		if err != nil {
-			t.observer.WriteError(err)
-			return err
-		}
-		t.observer.WriteBytes(n)
-	}
+	//for _ := range events {
+	//	//serializedEvent, err := t.codec.Encode(t.index, &events[i].Content)
+	//	//if err != nil {
+	//	//	dropped++
+	//	//	continue
+	//	//}
+	//	//buf = append(buf, append(serializedEvent, t.lineDelimiter...))
+	//	count += int64(len(batch.Events()))
+	//	//t.observer.WriteBytes(n)
+	//}
+
+	count += int64(len(batch.Events()))
 	//n, err := buf.WriteTo(t.connection)
 	//if err != nil {
 	//	t.observer.WriteError(err)
